@@ -5,8 +5,8 @@
 import argparse
 from bs4 import BeautifulSoup
 import requests
-from PIL import Image, ImageDraw, ImageFont
-import common
+from PIL import Image, ImageFont
+import common as c
 
 # argparse --------------------------------------------------------------------
 parser = argparse.ArgumentParser(description='Save image with article ' + 
@@ -23,25 +23,11 @@ parser.add_argument('-o', '--outdir', type=str, default='.',
                     help='path where to store output (default: current dir)')
 args = parser.parse_args()
 
-# fonts declaration -----------------------------------------------------------
-font_dir = args.fontdir
-f18 = ImageFont.truetype(font_dir + "/" + args.font_face[0] + ".ttf", 18)
-fb30 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 30)
-fb72 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 72)
-
-letters_per_heading = 45
-letters_per_comment = 80
-
-# positions and offsets to fill a two-column image
-coord = {
-    "x": 0,
-    "y": 130,
-    "xd": 960,
-    "yd": 160,
-    "px": 230,
-    "ho": 5,
-    "ao": 80,
-    "po": 110
+# font declaration ------------------------------------------------------------
+fonts = {
+    "f18": ImageFont.truetype(args.fontdir + "/" + args.font_face[0] + ".ttf", 18),
+    "fb30": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 30),
+    "fb72": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 72)
 }
 
 # page URL --------------------------------------------------------------------
@@ -51,26 +37,25 @@ url = "https://www.cell.com/cell/current"
 response = requests.get(url)
 soup = BeautifulSoup(response.text, "html.parser")
 soup = soup.find(id = "Articles").parent
-highlights = soup.findAll("div", {"class": "articleCitation"})
+articles = soup.findAll("div", {"class": "articleCitation"})
 
 # parse pictures, headlines and dates -----------------------------------------
-h = []
-for item in highlights:
+highlights = []
+for item in articles:
     try:
         img = item.find("div", {"class": "toc__item__cover"}).a.img
         headline = item.find("h3", {"class": "toc__item__title"})
         authors = item.find("ul", {"class": "toc__item__authors"})
         publication = item.find("div", {"class": "toc__item__details"})
          
-        #TODO resize images
-        h.append({
+        # TODO resize images
+        highlights.append({
             "img": "https:" + img['src'],
-            "headline": common.newline_join(headline.get_text().strip(),
-                                            letters_per_heading),
-            "authors": common.shorten_authors(authors.get_text().strip()),
-            "publication": common.newline_join(publication.get_text().strip(),
-                                               letters_per_comment)
-                                               
+            "headline": c.newline_join(headline.get_text().strip(),
+                                            c.max_letters['heading']),
+            "authors": c.shorten_authors(authors.get_text().strip()),
+            "publication": c.newline_join(publication.get_text().strip(),
+                                               c.max_letters['comment'])
         })
     # I don't really want the ones that don't have complete info, so I just skip them
     except (TypeError, AttributeError):
@@ -84,33 +69,7 @@ if args.bg == "none":
 else:
     img = Image.open(args.bg)
 
-# use alpha mode for overlay
-draw = ImageDraw.Draw(img, "RGB")
-
-# heading
-draw.rectangle([0,0, 1920, 120], fill = (0,0,0))
-draw.text((50,15), "Cell - News", fill=(255,255,255), font=fb72)
-
-# TODO ideally move to function
-num_items = 6
-for i, entry in enumerate(h[0:(num_items-1)]):
-    row = i // num_items
-    column = i % num_items
-    xpos = coord['x'] + (coord['xd']*row)
-    ypos = coord['y'] + (coord['yd']*column)
-    img.paste(entry['img'], (xpos+10, ypos))
-    draw.text((xpos+coord['px'], ypos+coord['ho']), 
-              entry['headline'],
-              fill=(0,0,0),
-              font=fb30)
-    draw.text((xpos+coord['px'],ypos+coord['ao']), 
-              entry['authors'], 
-              fill=(128,128,128), 
-              font=f18)
-    draw.text((xpos+coord['px'],ypos+coord['po']), 
-              entry['publication'], 
-              fill=(128,128,128), 
-              font=f18)
+img = c.add_highlights(img, "Cell - News", highlights, c.coord, fonts)
 
 # save image
 img.save(args.outdir + "cell_news.jpg", quality = 100)
