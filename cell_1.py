@@ -4,10 +4,19 @@
 # imports ---------------------------------------------------------------------
 import argparse
 # TODO switch to beautifulSoup
+from bs4 import BeautifulSoup
 from lxml import html
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import common
+
+def shorten_authors(auth_string, display_auth = 6):
+    s = auth_string.split(',')
+    s = [x.strip() for x in s]
+    if len(s) >= (display_auth+1):
+        s = s[0:(display_auth-1)] + ["..."] + s[-1]
+    return ", ".join(s)
+
 
 # argparse ---------------------------------------------------------
 parser = argparse.ArgumentParser(description='Save image with article highlights from cell.com webpage')
@@ -15,6 +24,10 @@ parser.add_argument('--fontdir', type=str, default='.',
                     help='path where fonts are stored (default: current dir)')
 parser.add_argument('--font_face', type=str, nargs=2, default='arial arial_bold',
                     help='base name of regular and emphasized font face file (default: arial arial_bold)')
+# TODO maybe do default white full HD image
+parser.add_argument('--bg', type=str, default='none',
+                    help='path to HD background image to draw the highlights on.' +
+                    'Defaults to white background. (default: none)')
 parser.add_argument('-o', '--outdir', type=str, default='.',
                     help='path where to store output (default: current dir)')
 args = parser.parse_args()
@@ -27,8 +40,20 @@ fb72 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 72)
 
 letters_per_heading = 45
 
+# positions and offsets to fill a two-column image
+coord = {
+    "x": 0,
+    "y": 130,
+    "xd": 960,
+    "yd": 160,
+    "px": 230,
+    "ho": 5,
+    "ao": 80,
+    "po": 110
+}
+
 # page URL --------------------------------------------------------------------
-url = "http://www.cell.com/"
+url = "https://www.cell.com/cell/current"
 
 # parse html ------------------------------------------------------------------
 page = requests.get(url)
@@ -57,10 +82,14 @@ author = [ x.strip() for x in author ]
 
 publication = tree.xpath('//div[@class="cellp_postPub"]/a/text()')
 publication = [ x.strip() for x in publication ]
+
 # image creation --------------------------------------------------------------
 # standard full HD size
 # TODO add more sizes
-img = Image.new("RGB", (1920, 1080), color = (255,255,255))
+if args.bg == "none":
+    img = Image.new("RGB", (1920, 1080), color = (255,255,255))
+else:
+    img = Image.open(args.bg)
 
 # use alpha mode for overlay
 draw = ImageDraw.Draw(img, "RGB")
@@ -69,25 +98,26 @@ draw = ImageDraw.Draw(img, "RGB")
 draw.rectangle([0,0, 1920, 120], fill = (0,0,0))
 draw.text((50,15), "Cell - News", fill=(255,255,255), font=fb72)
 
-# positions and increments to fill a two-column image
-x_pos = 0
-y_pos = 130
-y_displacement = 160
-x_displacement = 960
-count = 0
-
-# generate output image
-for index, image in enumerate(images_resized):
-    row_position = index // 6
-    column_position = index % 6
-    x_coord = x_pos + (x_displacement*row_position)
-    y_coord = y_pos + (y_displacement*column_position)
-    img.paste(image, (x_coord+10, y_coord))
-#    black_rectangle_coord = [x_coord+10, y_coord+10, x_coord+x_displacement-10, y_coord+y_displacement-220]
-#    draw.rectangle(black_rectangle_coord, fill = (0,0,0, 160))
-    draw.text((x_coord+230,y_coord+5), headline[index], fill=(0,0,0), font=fb30)
-    draw.text((x_coord+230,y_coord+80), author[index], fill=(128,128,128), font=f18)
-    draw.text((x_coord+230,y_coord+110), publication[index], fill=(128,128,128), font=f18)
+# TODO ideally move to function
+num_items = 6
+for i, image in enumerate(images_resized):
+    row = i // num_items
+    column = i % num_items
+    xpos = coord['x'] + (coord['xd']*row)
+    ypos = coord['y'] + (coord['yd']*column)
+    img.paste(image, (xpos+10, ypos))
+    draw.text((xpos+coord['px'], ypos+coord['ho']), 
+              headline[i],
+              fill=(0,0,0),
+              font=fb30)
+    draw.text((xpos+coord['px'],ypos+coord['ao']), 
+              author[i], 
+              fill=(128,128,128), 
+              font=f18)
+    draw.text((xpos+coord['px'],ypos+coord['po']), 
+              publication[i], 
+              fill=(128,128,128), 
+              font=f18)
 
 # save image
 img.save(args.outdir + "cell_news.jpg", quality = 100)
