@@ -3,7 +3,7 @@
 
 # imports ---------------------------------------------------------------------
 import argparse
-from lxml import html
+from bs4 import BeautifulSoup
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import common
@@ -13,7 +13,11 @@ parser = argparse.ArgumentParser(description='Save image with article highlights
 parser.add_argument('--fontdir', type=str, default='.',
                     help='path where fonts are stored (default: current dir)')
 parser.add_argument('--font_face', type=str, nargs=2, default='arial arial_bold',
-                    help='base name of regular and emphasized font face file (default: arial arial_bold)')
+                    help='base name of regular and emphasized font face file ' + 
+                    '(default: arial arial_bold)')
+parser.add_argument('--bg', type=str, default='none',
+                    help='path to HD background image to draw the highlights on.' +
+                    'Defaults to white background. (default: none)')
 parser.add_argument('-o', '--outdir', type=str, default='.',
                     help='path where to store output (default: current dir)')
 args = parser.parse_args()
@@ -25,61 +29,59 @@ f24 = ImageFont.truetype(font_dir + "/" + args.font_face[0] + ".ttf", 24)
 fb30 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 30)
 fb72 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 72)
 
-
 # max text dimesions ----------------------------------------------------------
 letters_per_heading = 55
 letters_per_comment = 80
 
+# positions and offsets to fill a two-column image
+coord = {
+    "x": 0,
+    "y": 130,
+    "xd": 960,
+    "yd": 160,
+    "px": 230,
+    "ho": 5,
+    "ao": 80,
+    "po": 110
+}
+
 # page URL --------------------------------------------------------------------
-url = "http://www.nature.com/news/index.html"
+url = "https://www.nature.com/nature/research-articles"
 
 # parse html ------------------------------------------------------------------
-page = requests.get(url)
-tree = html.fromstring(page.content)
+response = requests.get(url)
+soup = BeautifulSoup(response.text, "html.parser")
+highlights = soup.findAll('article')
 
 # parse pictures, headlines and dates -----------------------------------------
-url_level2 = tree.xpath('//div[@class="col left"]/descendant::*/h3/a/@href')
-picture_1 = []
-for u in url_level2:   
-    page = requests.get(u)
-    tree2 = html.fromstring(page.content)
-    picture_1.append(tree2.xpath('//div[@class="img img-middle"][1]/descendant::*/img/@src'))
-
-picture_2 = []
-for u in url_level2:   
-    page = requests.get(u)
-    tree2 = html.fromstring(page.content)
-    picture_2.append(tree2.xpath('//img[@class="figure__image"]/@src'))
-
-picture = []
-for f, s in zip(picture_1, picture_2):
-    if not f:
-        picture.append("http:"+s[0])
-    else:
-        picture.append("http://www.nature.com"+f[0])
-
-
-# download images and resize them for two column HD size picture
-images = [ Image.open(requests.get(x, stream=True).raw) for x in picture]
-images_resized = [ common.resize_img_to_x(x, 190) for x in images ]
-
-headline = tree.xpath('//div[@class="col left"]/descendant::*/h3/a/text()')
-
-headline = []
-for a in tree.xpath('//div[@class="col left"]/descendant::*/h3/a'):
-    headline.append(" ".join([ t.strip() for t in a.itertext()]))
-headline = [ x.strip() for x in headline ]
-headline = [common.newline_join(x, letters_per_heading) for x in headline ]
-
-comment = tree.xpath('//div[@class="col left"]/descendant::*/p[@class="standfirst truncate to-200"]/text()')
-comment = [ x.strip() for x in comment ]
-comment = [common.newline_join(x, letters_per_comment) for x in comment ]
-
+h = []
+for item in highlights:
+    try:
+        img = item.find("div", {"class": "c-card__image"}).picture.img
+        headline = item.find("h3", {"class": "c-card__title"})
+        authors = item.find("ul", {"class": "c-author-list"})
+        publication = item.find("div", {"class": "c-card__summary"})
+    
+        #TODO resize images
+        h.append({
+            "img": "https:" + img['src'],
+            "headline": common.newline_join(headline.get_text().strip(),
+                                            letters_per_heading),
+            "authors": authors.get_text().strip(),
+            "publication": common.newline_join(publication.get_text().strip(),
+                                               letters_per_comment)
+        })
+    # I don't really want the ones that don't have complete info, so I just skip them
+    except (TypeError, AttributeError):
+        continue
 
 # image creation --------------------------------------------------------------
 # standard full HD size
 # TODO add more sizes
-img = Image.new("RGB", (1920, 1080), color = (255,255,255))
+if args.bg == "none":
+    img = Image.new("RGB", (1920, 1080), color = (255,255,255))
+else:
+    img = Image.open(args.bg)
 
 # use alpha mode for overlay
 draw = ImageDraw.Draw(img, "RGB")
@@ -88,24 +90,26 @@ draw = ImageDraw.Draw(img, "RGB")
 draw.rectangle([0,0, 1920, 120], fill = (0,0,0))
 draw.text((50,15), "Nature - News", fill=(255,255,255), font=fb72)
 
-# positions and increments to fill a two-column image
-x_pos = 0
-y_pos = 130
-y_displacement = 160
-x_displacement = 960
-count = 0
-
-# generate output image
-for index, image in enumerate(images_resized):
-    row_position = index // 6
-    column_position = index % 6
-    x_coord = x_pos + (x_displacement*row_position)
-    y_coord = y_pos + (y_displacement*column_position)
-    img.paste(image, (x_coord+10, y_coord))
-#    black_rectangle_coord = [x_coord+10, y_coord+10, x_coord+x_displacement-10, y_coord+y_displacement-220]
-#    draw.rectangle(black_rectangle_coord, fill = (0,0,0, 160))
-    draw.text((x_coord+230,y_coord), headline[index], fill=(0,0,0), font=fb30)
-    draw.text((x_coord+230,y_coord+65), comment[index], fill=(128,128,128), font=f18)
+# TODO ideally move to function
+num_items = 6
+for i, entry in enumerate(h[0:(num_items-1)]):
+    row = i // num_items
+    column = i % num_items
+    xpos = coord['x'] + (coord['xd']*row)
+    ypos = coord['y'] + (coord['yd']*column)
+    img.paste(entry['img'], (xpos+10, ypos))
+    draw.text((xpos+coord['px'], ypos+coord['ho']), 
+              entry['headline'],
+              fill=(0,0,0),
+              font=fb30)
+    draw.text((xpos+coord['px'],ypos+coord['ao']), 
+              entry['authors'], 
+              fill=(128,128,128), 
+              font=f18)
+    draw.text((xpos+coord['px'],ypos+coord['po']), 
+              entry['publication'], 
+              fill=(128,128,128), 
+              font=f18)
 
 # save image
 img.save(args.outdir + "/" + "nature_news.jpg", quality = 100)

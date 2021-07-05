@@ -8,7 +8,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 import common
 
-# argparse ---------------------------------------------------------
+# argparse --------------------------------------------------------------------
 parser = argparse.ArgumentParser(description='Save image with article ' + 
                                  'highlights from cell.com webpage')
 parser.add_argument('--fontdir', type=str, default='.',
@@ -16,7 +16,6 @@ parser.add_argument('--fontdir', type=str, default='.',
 parser.add_argument('--font_face', type=str, nargs=2, default='arial arial_bold',
                     help='base name of regular and emphasized font face file ' + 
                     '(default: arial arial_bold)')
-# TODO maybe do default white full HD image
 parser.add_argument('--bg', type=str, default='none',
                     help='path to HD background image to draw the highlights on.' +
                     'Defaults to white background. (default: none)')
@@ -31,6 +30,7 @@ fb30 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 30)
 fb72 = ImageFont.truetype(font_dir + "/" + args.font_face[1] + ".ttf", 72)
 
 letters_per_heading = 45
+letters_per_comment = 80
 
 # positions and offsets to fill a two-column image
 coord = {
@@ -56,18 +56,25 @@ highlights = soup.findAll("div", {"class": "articleCitation"})
 # parse pictures, headlines and dates -----------------------------------------
 h = []
 for item in highlights:
-    img = item.find("div", {"class": "toc__item__cover"}).a.img
-    headline = item.find("h3", {"class": "toc__item__title"})
-    authors = item.find("ul", {"class": "toc__item__authors"})
-    publication = item.find("div", {"class": "toc__item__details"})
-      
-    h.append({
-        "img": "https:" + img['src'],
-        "headline": headline.get_text(),
-        "authors": common.shorten_authors(authors.get_text()),
-        "publication": publication.get_text()
-        }
-    )
+    try:
+        img = item.find("div", {"class": "toc__item__cover"}).a.img
+        headline = item.find("h3", {"class": "toc__item__title"})
+        authors = item.find("ul", {"class": "toc__item__authors"})
+        publication = item.find("div", {"class": "toc__item__details"})
+         
+        #TODO resize images
+        h.append({
+            "img": "https:" + img['src'],
+            "headline": common.newline_join(headline.get_text().strip(),
+                                            letters_per_heading),
+            "authors": common.shorten_authors(authors.get_text().strip()),
+            "publication": common.newline_join(publication.get_text().strip(),
+                                               letters_per_comment)
+                                               
+        })
+    # I don't really want the ones that don't have complete info, so I just skip them
+    except (TypeError, AttributeError):
+        continue
 
 # image creation --------------------------------------------------------------
 # standard full HD size
