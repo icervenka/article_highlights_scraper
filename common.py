@@ -28,5 +28,11 @@ def newline_join(string, line_length):
             
     return(line.strip())
 
+def shorten_authors(auth_string, display_auth = 6):
+    s = auth_string.split(',')
+    s = [x.strip() for x in s]
+    if len(s) >= (display_auth+1):
+        s = s[0:(display_auth-1)] + ["..."] + [s[-1]]
+    return ", ".join(s)
 
 

@@ -3,27 +3,19 @@
 
 # imports ---------------------------------------------------------------------
 import argparse
-# TODO switch to beautifulSoup
 from bs4 import BeautifulSoup
-from lxml import html
 import requests
 from PIL import Image, ImageDraw, ImageFont
 import common
 
-def shorten_authors(auth_string, display_auth = 6):
-    s = auth_string.split(',')
-    s = [x.strip() for x in s]
-    if len(s) >= (display_auth+1):
-        s = s[0:(display_auth-1)] + ["..."] + s[-1]
-    return ", ".join(s)
-
-
 # argparse ---------------------------------------------------------
-parser = argparse.ArgumentParser(description='Save image with article highlights from cell.com webpage')
+parser = argparse.ArgumentParser(description='Save image with article ' + 
+                                 'highlights from cell.com webpage')
 parser.add_argument('--fontdir', type=str, default='.',
                     help='path where fonts are stored (default: current dir)')
 parser.add_argument('--font_face', type=str, nargs=2, default='arial arial_bold',
-                    help='base name of regular and emphasized font face file (default: arial arial_bold)')
+                    help='base name of regular and emphasized font face file ' + 
+                    '(default: arial arial_bold)')
 # TODO maybe do default white full HD image
 parser.add_argument('--bg', type=str, default='none',
                     help='path to HD background image to draw the highlights on.' +
@@ -56,32 +48,26 @@ coord = {
 url = "https://www.cell.com/cell/current"
 
 # parse html ------------------------------------------------------------------
-page = requests.get(url)
-tree = html.fromstring(page.content)
+response = requests.get(url)
+soup = BeautifulSoup(response.text, "html.parser")
+soup = soup.find(id = "Articles").parent
+highlights = soup.findAll("div", {"class": "articleCitation"})
 
 # parse pictures, headlines and dates -----------------------------------------
-picture = tree.xpath('//div[@class="cellp_postImg"]/img/@src')
-picture_prepend_string = "http://www.cell.com:80"
-
-picture_address_sanitized = []
-for pic in picture:
-    if not pic.startswith("http"):
-        pic = picture_prepend_string + pic
-    picture_address_sanitized.append(pic)    
-
-# download images and resize them for two column HD size picture
-images = [ Image.open(requests.get(x, stream=True).raw) for x in picture_address_sanitized ]
-images_resized = [ common.resize_img_to_x(x, 190) for x in images ]
-
-headline = tree.xpath('//div[@class="cellp_postTitle"]/a/text()')
-headline = [ x.strip() for x in headline ]
-headline = [common.newline_join(x, letters_per_heading) for x in headline ]
-
-author = tree.xpath('//div[@class="cellp_postAuthors"][1]/text()')
-author = [ x.strip() for x in author ]
-
-publication = tree.xpath('//div[@class="cellp_postPub"]/a/text()')
-publication = [ x.strip() for x in publication ]
+h = []
+for item in highlights:
+    img = item.find("div", {"class": "toc__item__cover"}).a.img
+    headline = item.find("h3", {"class": "toc__item__title"})
+    authors = item.find("ul", {"class": "toc__item__authors"})
+    publication = item.find("div", {"class": "toc__item__details"})
+      
+    h.append({
+        "img": "https:" + img['src'],
+        "headline": headline.get_text(),
+        "authors": common.shorten_authors(authors.get_text()),
+        "publication": publication.get_text()
+        }
+    )
 
 # image creation --------------------------------------------------------------
 # standard full HD size
@@ -100,22 +86,22 @@ draw.text((50,15), "Cell - News", fill=(255,255,255), font=fb72)
 
 # TODO ideally move to function
 num_items = 6
-for i, image in enumerate(images_resized):
+for i, entry in enumerate(h[0:(num_items-1)]):
     row = i // num_items
     column = i % num_items
     xpos = coord['x'] + (coord['xd']*row)
     ypos = coord['y'] + (coord['yd']*column)
-    img.paste(image, (xpos+10, ypos))
+    img.paste(entry['img'], (xpos+10, ypos))
     draw.text((xpos+coord['px'], ypos+coord['ho']), 
-              headline[i],
+              entry['headline'],
               fill=(0,0,0),
               font=fb30)
     draw.text((xpos+coord['px'],ypos+coord['ao']), 
-              author[i], 
+              entry['authors'], 
               fill=(128,128,128), 
               font=f18)
     draw.text((xpos+coord['px'],ypos+coord['po']), 
-              publication[i], 
+              entry['publication'], 
               fill=(128,128,128), 
               font=f18)
 
