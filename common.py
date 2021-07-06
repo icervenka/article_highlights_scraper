@@ -5,23 +5,43 @@ from PIL import Image, ImageDraw
 """
 
 """
+
 # various constants -----------------------------------------------------------
+# urls and other journal specific values
+journals = {
+    "cell": {
+        "url": "https://www.cell.com/cell/current",
+        "headline": "Cell - News",
+        "filename": "cell_news.jpg",
+        },
+    "science": {
+        "url": "http://www.sciencemag.org/news/latest-news",
+        "headline": "Science - News",
+        "filename": "science_news.jpg",
+        },
+    "nature": {
+        "url": "https://www.nature.com/nature/research-articles",
+        "headline": "Nature - News",
+        "filename": "nature_news.jpg",
+        }
+    }
+
 # max line lengths
 max_letters = {
-    "heading": 45,
-    "comment": 80
+    "headline": 45, # breaks at the end of the word that exceeds char number
+    "comment": 80 # breaks at the end of the word that exceeds char number
 }
 
 # positions and offsets to fill a two-column image
 coord = {
-    "x": 0,
-    "y": 130,
-    "xd": 960,
-    "yd": 160,
-    "px": 230,
-    "ho": 5,
-    "ao": 80,
-    "po": 110
+    "x": 0,     # x-origin
+    "y": 130,   # y-origin, accounts for slide heading
+    "xd": 960,  # x-distance of next highlight
+    "yd": 160,  # y-distance of next highlight
+    "px": 230,  # x-padding to the right of image
+    "ho": 5,    # y-offset for individual article heading
+    "ao": 80,   # y-offset for individual author list 
+    "po": 110   # y-offset for individual comment
 }
 
 # function definition ---------------------------------------------------------
@@ -149,3 +169,88 @@ def add_highlights(img, heading, highlights, coord, fonts, num_items = 6):
                   fill=(128,128,128), 
                   font=fonts['f18'])
     return draw
+
+# TODO this is a messy function with a lot of repeated code, try to break it 
+# apart, isolating the most common parts
+def extract_entries(soup, journal):
+    """
+    
+
+    Parameters
+    ----------
+    soup : TYPE
+        DESCRIPTION.
+    journal : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    entries : TYPE
+        DESCRIPTION.
+
+    """
+    entries = []
+
+    if(journal == "cell"):
+        articles = soup.find(id = "Articles").parent.findAll("div", {"class": "articleCitation"})
+        for item in articles:
+            try:
+                entries.append({
+                    "img": item.find("div", {"class": "toc__item__cover"}).a.img['src'],
+                    "headline": item.find("h3", {"class": "toc__item__title"}).get_text().strip(),    
+                    "authors": item.find("ul", {"class": "toc__item__authors"}).get_text().strip(),
+                    "comment": item.find("div", {"class": "toc__item__details"}).get_text().strip()
+                })
+            # I don't really want the ones that don't have complete info, so I just skip them
+            except (TypeError, AttributeError):
+                continue
+    if(journal == "science"):
+        articles = soup.find(id = "Articles").parent.findAll("div", {"class": "articleCitation"})
+        for item in articles:
+            try:
+                entries.append({
+                    "img": item.find("div", {"class": "media__icon"}).a.img['src'],
+                    "headline": item.find("h2", {"class": "media__headline"}).get_text().strip(),    
+                    "authors": item.find("p", {"class": "byline"}).get_text().strip(),
+                    "comment": item.find("div", {"class": "media__deck"}).get_text().strip()
+                })
+            # I don't really want the ones that don't have complete info, so I just skip them
+            except (TypeError, AttributeError):
+                continue
+    if(journal == "nature"):
+        articles = soup.find(id = "Articles").parent.findAll("div", {"class": "articleCitation"})
+        for item in articles:
+            try:
+                entries.append({
+                    "img": item.find("div", {"class": "c-card__image"}).picture.img['src'],
+                    "headline": item.find("h3", {"class": "c-card__title"}).get_text().strip(),    
+                    "authors": item.find("ul", {"class": "c-author-list"}).get_text().strip(),
+                    "comment": item.find("div", {"class": "c-card__summary"}).get_text().strip()
+                })
+            # I don't really want the ones that don't have complete info, so I just skip them
+            except (TypeError, AttributeError):
+                continue
+            
+    return entries
+
+
+def process_entry(entry):
+    """
+    
+
+    Parameters
+    ----------
+    entry : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+    # TODO resize images
+    entry['img'] = "https:" + entry['img']
+    entry['headline'] = newline_join(entry['headline'], max_letters['headline'])
+    entry['authors'] = shorten_authors(entry['authors'])
+    entry['comment']: newline_join(entry['comment'], max_letters['comment'])
+    return(entry)
