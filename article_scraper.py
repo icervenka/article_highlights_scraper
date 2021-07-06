@@ -20,11 +20,11 @@ parser.add_argument('--journal', type=str, default='cell',
                     help='journal to get highlights from (default: cell)')
 parser.add_argument('--fontdir', type=str, default='.',
                     help='path where fonts are stored (default: current dir)')
-parser.add_argument('--font_face', type=str, nargs=2, default='arial arial_bold',
+parser.add_argument('--font_face', nargs=2, default=['arial', 'arial_bold'],
                     help='base name of regular and emphasized font face file ' + 
                     '(default: arial arial_bold)')
 parser.add_argument('--bg', type=str, default='none',
-                    help='path to HD background image to draw the highlights on.' +
+                    help='path to HD background image to draw the highlights on. ' +
                     'Defaults to white background. (default: none)')
 parser.add_argument('-o', '--outdir', type=str, default='.',
                     help='path where to store output (default: current dir)')
@@ -32,9 +32,9 @@ args = parser.parse_args()
 
 # font declaration ------------------------------------------------------------
 fonts = {
-    "f18": ImageFont.truetype(args.fontdir + "/" + args.font_face[0] + ".ttf", 18),
-    "fb30": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 30),
-    "fb72": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 72)
+    "text": ImageFont.truetype(args.fontdir + "/" + args.font_face[0] + ".ttf", 14),
+    "heading": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 22),
+    "main": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 52)
 }
 
 # parse html ------------------------------------------------------------------
@@ -51,14 +51,14 @@ else:
     img = Image.open(args.bg)
 
 # parse and process highlights from page tree
-highlights = [ c.process_entry(x) for x in c.extract_entries(soup, args.journal) ]
+highlights = [ c.process_entry(x, c.highlight_img_width) for x in c.extract_entries(soup, args.journal) ]
 
 # draw highlights on top of image
-img = c.add_highlights(img, 
-                       c.journals[args.journal]['headline'], 
-                       highlights, 
-                       c.coord, 
-                       fonts)
+c.add_highlights(img,
+                 c.journals[args.journal]['headline'],
+                 highlights,
+                 c.coord,
+                 fonts)
 
 # save image
-img.save(args.outdir + c.journals[args.journal]['filename'], quality = 100)
+img.save(args.outdir + "/" + c.journals[args.journal]['filename'], quality = 100)

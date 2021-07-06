@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from PIL import Image, ImageDraw
+import requests
 
 """
 
@@ -26,18 +27,21 @@ journals = {
         }
     }
 
+# image width for graphical abstract in pixels
+highlight_img_width = 190
+
 # max line lengths
 max_letters = {
-    "headline": 45, # breaks at the end of the word that exceeds char number
-    "comment": 80 # breaks at the end of the word that exceeds char number
+    "headline": 60, # breaks at the end of the word that exceeds char number
+    "comment": 100 # breaks at the end of the word that exceeds char number
 }
 
 # positions and offsets to fill a two-column image
 coord = {
     "x": 0,     # x-origin
-    "y": 130,   # y-origin, accounts for slide heading
+    "y": 110,   # y-origin, accounts for slide heading
     "xd": 960,  # x-distance of next highlight
-    "yd": 160,  # y-distance of next highlight
+    "yd": 230,  # y-distance of next highlight
     "px": 230,  # x-padding to the right of image
     "ho": 5,    # y-offset for individual article heading
     "ao": 80,   # y-offset for individual author list 
@@ -94,7 +98,7 @@ def newline_join(string, line_length):
             
     return(line.strip())
 
-def shorten_authors(auth_string, display_auth = 6):
+def shorten_authors(auth_string, display_auth = 5):
     """
     
 
@@ -117,7 +121,7 @@ def shorten_authors(auth_string, display_auth = 6):
         s = s[0:(display_auth-1)] + ["..."] + [s[-1]]
     return ", ".join(s)
 
-def add_highlights(img, heading, highlights, coord, fonts, num_items = 6):
+def add_highlights(img, heading, highlights, coord, fonts, items = 8, columns = 2):
     """
     
 
@@ -146,28 +150,28 @@ def add_highlights(img, heading, highlights, coord, fonts, num_items = 6):
     draw = ImageDraw.Draw(img, "RGB")
     
     # heading
-    draw.rectangle([0,0, 1920, 120], fill = (0,0,0))
-    draw.text((50,15), heading, fill=(255,255,255), font=fonts['fb72'])
+    draw.rectangle([0,0, 1920, 90], fill = (0,0,0))
+    draw.text((50,15), heading, fill=(255,255,255), font=fonts['main'])
     
     # highlights
-    for i, entry in enumerate(highlights[0:(num_items-1)]):
-        row = i // num_items
-        column = i % num_items
+    for i, entry in enumerate(highlights[0:items]):
+        row = i // (items//columns)
+        col = i % (items//columns)
         xpos = coord['x'] + (coord['xd']*row)
-        ypos = coord['y'] + (coord['yd']*column)
+        ypos = coord['y'] + (coord['yd']*col)
         img.paste(entry['img'], (xpos+10, ypos))
         draw.text((xpos+coord['px'], ypos+coord['ho']), 
                   entry['headline'],
                   fill=(0,0,0),
-                  font=fonts['fb30'])
+                  font=fonts['heading'])
         draw.text((xpos+coord['px'],ypos+coord['ao']), 
                   entry['authors'], 
-                  fill=(128,128,128), 
-                  font=fonts['f18'])
+                  fill=(102,102,102), 
+                  font=fonts['text'])
         draw.text((xpos+coord['px'],ypos+coord['po']), 
-                  entry['publication'], 
-                  fill=(128,128,128), 
-                  font=fonts['f18'])
+                  entry['comment'], 
+                  fill=(102,102,102),
+                  font=fonts['text'])
     return draw
 
 # TODO this is a messy function with a lot of repeated code, try to break it 
@@ -234,7 +238,7 @@ def extract_entries(soup, journal):
     return entries
 
 
-def process_entry(entry):
+def process_entry(entry, img_width):
     """
     
 
@@ -248,9 +252,11 @@ def process_entry(entry):
     None.
 
     """
-    # TODO resize images
-    entry['img'] = "https:" + entry['img']
+    # TODO width of images as parameter
+    if not entry['img'].startswith("https"):
+        entry['img'] = "https:" + entry['img']
+    entry['img'] = resize_img_to_x(Image.open(requests.get(entry['img'], stream=True).raw), img_width)
     entry['headline'] = newline_join(entry['headline'], max_letters['headline'])
     entry['authors'] = shorten_authors(entry['authors'])
-    entry['comment']: newline_join(entry['comment'], max_letters['comment'])
+    entry['comment'] = newline_join(entry['comment'], max_letters['comment'])
     return(entry)
