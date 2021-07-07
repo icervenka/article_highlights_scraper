@@ -337,7 +337,9 @@ highlights = [ process_highlight(x, highlight_img_width) for x in extract_highli
 # draw highlights on top of image
 # ImageDraw inside the function directly modifies the Image stored in img
 add_highlights(img,
-               journals[args.journal]['headline'],
+               highlights,
+               journals[args.journal]['heading'],
+               coord,
                fonts,
                items = 8)
 
