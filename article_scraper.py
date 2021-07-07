@@ -2,13 +2,17 @@
 # -*- coding: utf-8 -*-
 
 """
-
+Simple scraper to retrieve currently published articles from three major journal
+websites (Cell, Nature, Science) and summarise them as a jpg file in two column
+format.
+Requries path and names of ttf files of a font and its emphasized version (eg. bold)
+Background argument is currently not implemented
 """
 
 # imports ---------------------------------------------------------------------
 import argparse
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 from PIL import Image, ImageFont
 import common as c
 
@@ -33,7 +37,7 @@ args = parser.parse_args()
 # font declaration ------------------------------------------------------------
 fonts = {
     "text": ImageFont.truetype(args.fontdir + "/" + args.font_face[0] + ".ttf", 14),
-    "heading": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 22),
+    "title": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 22),
     "main": ImageFont.truetype(args.fontdir + "/" + args.font_face[1] + ".ttf", 52)
 }
 
@@ -46,19 +50,20 @@ soup = BeautifulSoup(response.text, "html.parser")
 # TODO add more sizes
 # TODO bg doesn't work yet, function draws black rectangle as headline bg
 if args.bg == "none":
-    img = Image.new("RGB", (1920, 1080), color = (255,255,255))
+    img = Image.new("RGB", (1920, 1080), color = c.color_white)
 else:
     img = Image.open(args.bg)
 
 # parse and process highlights from page tree
-highlights = [ c.process_entry(x, c.highlight_img_width) for x in c.extract_entries(soup, args.journal) ]
+highlights = [ c.process_highlight(x, c.highlight_img_width) for x in c.extract_highlight(soup, args.journal) ]
 
 # draw highlights on top of image
 c.add_highlights(img,
                  c.journals[args.journal]['headline'],
                  highlights,
                  c.coord,
-                 fonts)
+                 fonts,
+                 items = 8)
 
 # save image
 img.save(args.outdir + "/" + c.journals[args.journal]['filename'], quality = 100)
